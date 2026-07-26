@@ -40,7 +40,7 @@ this tells you what % of the total spread each PC is responsible for. So if PC1+
 If you don't z-score the features first, a feature like Value (which is in the millions) will completely dominate the covariance matrix compared to something like Stamina (0-100). PCA would basically just become "PC1 = Value" and ignore everything else, since raw variance is scale-dependent, not importance-dependent. Standardizing first (mean 0, std 1) makes sure every feature starts on equal footing, so PCA is actually picking up real relationships between features instead of just picking whichever feature happened to have the biggest numbers.
 
 
-# HOW ITS ACTUALLY USED (in the code)
+# HOW ITS ACTUALLY USED 
 
 1. build the covariance matrix from the standardized data
 2. get the eigenvalues/eigenvectors of that matrix
