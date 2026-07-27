@@ -4,6 +4,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from pathlib import Path
+import seaborn as sns
 
 
 CSV_PATH = str(Path(__file__).resolve().parent / "archive" / "kl.csv")
@@ -58,20 +59,30 @@ class PCA:
             if col not in df.columns:
                 raise ValueError(f"Column not found: {col}")
 
+
+        # cleaning  any N.A values
         cleany = df.dropna(subset= required_cols)
         X = cleany[self.cols].to_numpy()
       
-        
+        #Getting the position and namr of each player
         positions = cleany["Position"].to_numpy()
         names = cleany["Name"].to_numpy()
 
+
+        # The avrage value of the matrix (sum/total number)
         mean = X.mean(axis=0)
+
+
+      # std tells us how far is the matrix from 0,0
         std = X.std(axis=0, ddof=1)
         X_std = (X - mean) / std # Z-score
 
         n = X_std.shape[0]
+      # a matrix to relate between each feature
         X_cov = (X_std.T @ X_std) / (n - 1)
 
+
+      
         eigenvalues, eigenvectors = np.linalg.eig(X_cov)
         eigenvalues = eigenvalues.real
         eigenvectors = eigenvectors.real
@@ -103,24 +114,30 @@ class PCA:
 
 
 def plot_pca_scatter(scores, positions, explained_variance_ratio, output_path):
+    plt.figure(figsize=(10, 8))
+    sns.scatterplot(
+        x=scores[:, 0], 
+        y=scores[:, 1], 
+        hue=positions,  # set each point by its respective player position
+        s=15,  # the size of each point
+        linewidth=0  # no white outline 
+    )
+
+  # X and Y label
+    plt.xlabel(f"PC1 ({explained_variance_ratio[0]*100:.1f}% variance)")
+    plt.ylabel(f"PC2 ({int(explained_variance_ratio[1]*100):.1f}% variance)")
+
   
-    fig, ax = plt.subplots(figsize=(10, 8))
-    unique_positions = np.unique(positions)
-    colors = plt.cm.tab20(np.linspace(0, 1, len(unique_positions)))
+    plt.title("PCA of Players")
+    
+    # Move legend outside plot area
+    plt.legend(title="Position", bbox_to_anchor=(1, 1), fontsize=8)
 
-    for pos, color in zip(unique_positions, colors):
-        mask = positions == pos
-        ax.scatter(scores[mask, 0], scores[mask, 1], label=pos,
-                   color=color, s=10, alpha=0.75, edgecolors='none')
+  # X and Y axis
+    plt.axhline(0, color='gray') 
+    plt.axvline(0, color='gray')
 
-    ax.set_xlabel(f"PC1 ({explained_variance_ratio[0]*100:.1f}% variance)")
-    ax.set_ylabel(f"PC2 ({explained_variance_ratio[1]*100:.1f}% variance)")
-    ax.set_title("PCA of FIFA 19 Player Attributes, Colored by Position")
-    ax.legend(title="Position", bbox_to_anchor=(1.02, 1), loc="upper left", fontsize=8)
-    ax.axhline(0, color='gray', linewidth=0.5)
-    ax.axvline(0, color='gray', linewidth=0.5)
-    plt.tight_layout()
-    plt.savefig(output_path, dpi=150)
+    plt.savefig(output_path, dpi=300)
     plt.close()
     print(f"Scatter plot saved to {output_path}")
 
@@ -128,35 +145,21 @@ def plot_pca_scatter(scores, positions, explained_variance_ratio, output_path):
 def main():
     pca = PCA(path=CSV_PATH, cols=Principal_Components, n_components=N_COMPONENTS)
     pca.run()
-
+    print(f"First {N_COMPONENTS} components explain "f"{pca.explained_variance_ratio[:N_COMPONENTS].sum()*100:.2f}% of total variance.")
     print()
-    print("Eigenvalues (sorted, descending):")
-    print(np.round(pca.eigenvalues_sorted, 4))
-    print()
-    print("Explained variance ratio per component:")
-    print(np.round(pca.explained_variance_ratio, 4))
-    print(f"First {N_COMPONENTS} components explain "
-          f"{pca.explained_variance_ratio[:N_COMPONENTS].sum()*100:.2f}% of total variance.")
-    print()
-    print("Top-2 principal component loadings (which original features drive each PC):")
-    loadings = pd.DataFrame(
-        pca.projection_matrix,
-        index=Principal_Components,
-        columns=[f"PC{i+1}" for i in range(N_COMPONENTS)]
-    )
-    print(loadings.round(3))
+  
+    rows = len(pca.projection_matrix)
+    col = len(pca.projection_matrix[0])
+    print(" "* 17 + "PC1" + " "*5 + "PC2")
+    for i in range(rows):
+      print (f"{Principal_Components[i]:<15} : ", end="")
+      for j in range(col):
+        print (f"{pca.projection_matrix[i][j]:.3f}" , end="  ")
+      print()
 
     plot_pca_scatter(pca.scores, pca.positions, pca.explained_variance_ratio, "pca_scatter.png")
 
-    return {
-        "X_std": pca.X_std,
-        "cov_matrix": pca.cov_matrix,
-        "eigenvalues": pca.eigenvalues_sorted,
-        "eigenvectors": pca.eigenvectors_sorted,
-        "explained_variance_ratio": pca.explained_variance_ratio,
-        "scores": pca.scores,
-        "loadings": loadings,
-    }
+
 
 
 if __name__ == "__main__":
