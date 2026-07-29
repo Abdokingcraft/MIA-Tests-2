@@ -1,23 +1,22 @@
 ### PCA
 
-PCA helps to correlate variables together to see how close someone is to another by taking a percentage of each feature together 
+PCA helps to correlate variables together to see how close someone is to another by taking a percentage of each feature together
 
 `E.X (0.32 * Stamina + 0.67 * Dribbling + ...)`
 
-By doing this you can compare every feature relative to it's effectiveness 
-
+By doing this you can compare every feature relative to it's effectiveness
 
 # EIGENVALUES & EIGENVECTORS
 
 - Eigenvectors :
-These are the vectors we use instead of the x and y axis to have a relation between more than 2 features 
+  These are the vectors we use instead of the x and y axis to have a relation between more than 2 features
 
 When they are multiplied with the covergance matrix it doesn't change its direction but rather changes it's value which is called (Eigenvalue)
 
 They make us be able to have a visual understanding of how close/far 2 things are without looking at raw data
 
 - Eigenvalues :
-These tell you how much variance (spread) is packed along each eigenvector's direction. A big eigenvalue = that direction holds a lot of the real information/variation in the data. A tiny eigenvalue = that direction is basically just noise, barely any real spread happens there.
+  These tell you how much variance (spread) is packed along each eigenvector's direction. A big eigenvalue = that direction holds a lot of the real information/variation in the data. A tiny eigenvalue = that direction is basically just noise, barely any real spread happens there.
 
 The relationship between the two is this equation:
 
@@ -25,27 +24,165 @@ The relationship between the two is this equation:
 
 Where `A` is the covariance matrix, `v` is the eigenvector, and `λ` (lambda) is the eigenvalue. In plain words: when you multiply the covariance matrix by an eigenvector, you don't rotate it to a new direction, you just stretch or shrink it by a factor of `λ`. That's the whole definition of an eigenvector: a direction that survives the transformation unchanged, only scaled.
 
+# How does PCA work
 
-# WHY THIS MATTERS FOR PCA
+Let's say you have a table for players data consisting of (minute played), (shots), (passes) and (player rating), let's call them A,B,C and Y respectively
 
-Once you have all the eigenvectors + eigenvalues of the covariance matrix, you sort them by eigenvalue, biggest first. The eigenvector with the biggest eigenvalue is called PC1, it's the single direction in your data where players spread out the most. PC2 is the next best direction (perpendicular to PC1), and so on.
+|     | A   | B   | C   | Y   |
+| --- | --- | --- | --- | --- |
+| Player 1 | A_1 | B_1 | C_1 | Y_1 |
+| Player 2 | A_2 | B_2 | C_2 | Y_2 |
+| ... | ... | ... | ... | ... |
 
-`explained_variance_ratio = eigenvalue / sum(all eigenvalues)`
+And you want to see what is the closest player to someone you chose 
+You can look at every player on the datalist to see who is the closest, but what if you have 1000+ players' data, this is where PCA comes to the rescue
 
-this tells you what % of the total spread each PC is responsible for. So if PC1+PC2 explain 70% of the variance, it means squishing 9 features down into just 2 numbers still keeps 70% of what actually made players different from each other in the first place, you're not just guessing, you're keeping the parts of the data that matter most and throwing away the parts that barely mattered.
+In the beginning, we need to clean up the data from any N.A values and format Anything that is not just a number
 
+This cleans the data from any N.A
 
-# WHY YOU HAVE TO STANDARDIZE FIRST
+```python
+cleany = df.dropna(subset= required_cols)
+```
 
-If you don't z-score the features first, a feature like Value (which is in the millions) will completely dominate the covariance matrix compared to something like Stamina (0-100). PCA would basically just become "PC1 = Value" and ignore everything else, since raw variance is scale-dependent, not importance-dependent. Standardizing first (mean 0, std 1) makes sure every feature starts on equal footing, so PCA is actually picking up real relationships between features instead of just picking whichever feature happened to have the biggest numbers.
+This formats the money to remove the Signs
 
+```python
+df["Value"] = df["Value"].apply(money)
+```
 
-# HOW ITS ACTUALLY USED 
+Then we turn the Matrix into an array to be able to perform mathematical operation
 
-1. build the covariance matrix from the standardized data
-2. get the eigenvalues/eigenvectors of that matrix
-3. sort them by eigenvalue, biggest to smallest
-4. take the top 2 (or however many components you want) eigenvectors, this is the projection_matrix
-5. multiply your original standardized data by that projection matrix (X_std @ projection_matrix) to squish every player down from 9 numbers into just 2 (PC1, PC2)
+```python
+X = cleany[self.cols].to_numpy()
+```
 
-Now every player is just a dot on a 2D graph, and 2 players sitting close together on that graph means they were similar across the combination of all 9 original stats, not just 1 or 2 of them.
+This gets the mean ( sum / number of items )
+
+```python
+mean = X.mean(axis=0)
+```
+
+This gets the std of the matrix ( ∑( x - mean )² )/ n -1
+
+```python
+std = X.std(axis=0, ddof=1) 
+# axis = 0 means we trun an (9,9) matrix into a (1,9) matrix
+ddof = 1 means we divide by (n-1) instead of n
+```
+
+Then we subtract the from every cell in the matrix the mean and then we decide my the std
+
+```python
+X_std = (X - mean) / std 
+```
+
+## Why do we do this
+
+- obviously we can't imagine more than 3 axis/features so i am explaining on only 2 to make it easier
+  
+
+Let's have a visual representation to make this understandable
+
+![IMG20260729WA0037](C:/Users/Lenovo/VSCODE/.tasks2/images/step1.png)
+
+This is a raw data with only 2 features ( which means only 2 axis , X and Y )
+
+And the red star is the mean of the whole data
+
+Our objective is to get the points at (0,0) to make it easier to analysis
+
+![IMG20260729WA0036](C:/Users/Lenovo/VSCODE/.tasks2/images/step2.png)
+
+We got it by subtracting every feature by its mean value
+
+Now, we want to standardize the points, in this example the range of points at X [-15 : 15] is bigger than the range of points at Y [-5 : 5] , so the model would give X a bigger weight , we do this because PCA looks for the most variance feature to make it the most important one
+
+![](images/step3.png)
+
+---
+
+now we need to get the relation between every feature with each other
+
+we do that by multiplying the the Transpose of the std matrix to the matrix its self and we divide it my n-1
+
+![](images/2f.png)
+
+this is also what will look like for 5 features
+
+![](images/5f.png)
+
+(any feature would have a full effect on itself)
+
+the reason we get teh covariance matrix is to get the EIGENVECTORS
+
+# EIGENVALUES & EIGENVECTORS
+
+in the previous picture
+
+![](images/step3.png)
+
+the PC1 and PC2 are eigenvectors, which basically mean the new axis that we take into consideration when we want to know how close someone is to another
+
+this script gets the eigenvectors and values and evaluating which 2 eigenvectors has the most variance (information)
+
+```python
+        eigenvalues, eigenvectors = np.linalg.eig(X_cov)
+        eigenvalues = eigenvalues.real
+        eigenvectors = eigenvectors.real
+
+        sort_idx = np.argsort(eigenvalues)[::-1]
+        eigenvalues_sorted = eigenvalues[sort_idx]
+        eigenvectors_sorted = eigenvectors[:, sort_idx]
+
+        explained_variance_ratio = eigenvalues_sorted / eigenvalues_sorted.sum()
+
+        projection_matrix = eigenvectors_sorted[:, :self.n_components]
+```
+
+this turns the data relation between player_rating and features into player_rating and PC1,PC2
+
+```python
+scores = X_std @ projection_matrix
+```
+
+---
+
+# Usage of PCA
+
+we can use PCA to look for who is the closest to someone if we know their data
+
+we must use one of these methods
+
+note : every measurement is between **FEATURES** and not **PC1 and PC2**
+
+1. **Cosine Similarity** : measures the cosine of the angle between the vector of the players and the vector of the targeted player by getting the ration between the dot product and the product of both lengths , getting a 1 (cos = 1 , theta = 0) mean they are on the same direction so (HIGHER IS BETTER)
+  
+
+note : there is a point down because it computes the angle from multiple features not PC1 and PC2
+
+![](images/pca_cosine.png)
+
+2. **Euclidean distance** : measure the distance between the targeted player and each play by this equation $d_{Euclidean} = \sqrt{(x_2 - x_1)^2 + (y_2 - y_1)^2}$ so (LOWER IS BETTER)
+  
+
+![](images/pca_euclidean.png)
+
+3. **Manhattan distance** : measure the distance between the targeted player and each play by this equation $d_{Manhattan} = \vert{}x_2 - x_1\vert{} + \vert{}y_2 - y_1\vert{}$ so (LOWER IS BETTER)
+  
+
+![](images/pca_manhattan.png)
+
+notice that at Euclidean and Manhattan have almost exactly the same points
+
+4. **Pearson correlation** : it averages all of the players features and the targeted player features by subtracting the mean
+  
+
+```python
+        X_centered = X - X.mean(axis=1, keepdims=True)
+        t_centered = target - target.mean()
+```
+
+then it does the same thing we did in the cosine Similarity
+
+![pcacosinepng](C:/Users/Lenovo/VSCODE/.tasks2/images/pca_pearson.png)
