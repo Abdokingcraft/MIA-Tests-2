@@ -4,12 +4,10 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from pathlib import Path
-from collections import Counter
 
 
 CSV_PATH = str(Path(__file__).resolve().parent / "archive" / "kl.csv")
 
-# same attribute subset as task 2.2, so the vector representation of a player stays consistent
 Principal_Components = [
     "Finishing", "ShortPassing", "Dribbling", "SprintSpeed",
     "Strength", "Stamina", "Interceptions", "StandingTackle", "Value"
@@ -31,7 +29,32 @@ def money(v):
         return float(v[1:])
 
 
-# same PCA class as task 2.2, reused as-is for the bonus visualization
+# shared by PCA and ScoutingEngine, so it only lives in one place now.
+# loads the csv, turns Value into a number, and drops any rows missing data
+def load_players(path, cols, extra_col):
+    df = pd.read_csv(path, encoding="cp1252")
+    df["Value"] = df["Value"].apply(money)
+
+    required_cols = cols + [extra_col]
+    for col in required_cols:
+        if col not in df.columns:
+            raise ValueError(f"Column not found: {col}")
+
+    cleany = df.dropna(subset=required_cols).reset_index(drop=True)
+    return df, cleany
+
+
+# shared by PCA and ScoutingEngine too.
+# standardizes each column: subtract the mean, divide by the std (Z-score)
+def zscore(X):
+    mean = X.mean(axis=0)
+    std = X.std(axis=0, ddof=1)
+    X_std = (X - mean) / std
+    return X_std, mean, std
+
+
+# same PCA class from task 2.2, not touching its logic, just reusing the
+# helpers above instead of repeating the loading/z-score code
 class PCA:
     def __init__(self, path, cols, n_components=2):
         self.path = path
@@ -52,25 +75,17 @@ class PCA:
         self.scores = None
 
     def run(self):
-        df = pd.read_csv(self.path, encoding="cp1252")
-        df["Value"] = df["Value"].apply(money)
-
-        required_cols = self.cols + ["Position"]
-        for col in required_cols:
-            if col not in df.columns:
-                raise ValueError(f"Column not found: {col}")
-
-        cleany = df.dropna(subset=required_cols)
+        df, cleany = load_players(self.path, self.cols, "Position")
         X = cleany[self.cols].to_numpy()
 
+        # Getting the position and name of each player
         positions = cleany["Position"].to_numpy()
         names = cleany["Name"].to_numpy()
 
-        mean = X.mean(axis=0)
-        std = X.std(axis=0, ddof=1)
-        X_std = (X - mean) / std
+        X_std, mean, std = zscore(X)
 
         n = X_std.shape[0]
+        # a matrix to relate between each feature
         X_cov = (X_std.T @ X_std) / (n - 1)
 
         eigenvalues, eigenvectors = np.linalg.eig(X_cov)
@@ -102,12 +117,7 @@ class PCA:
         return scores
 
 
-# ---------------------------------------------------------------------------
-# task 2.3: the scouting engine. same "load once, store on self" pattern as
-# the PCA class above, but instead of projecting the data it ranks every
-# player by similarity to a single target player, using 4 metrics built
-# from scratch (all vectorized: target vs the whole pool at once, no loop)
-# ---------------------------------------------------------------------------
+# task 2.3: finds the players most similar to a target player
 class ScoutingEngine:
     def __init__(self, path, cols, target_name, n_top=TOP_N):
         self.path = path
@@ -122,80 +132,65 @@ class ScoutingEngine:
         self.results_raw = None
         self.results_std = None
         self.final_shortlist = None
-        self.picked_by = None
 
     def load(self):
-        df = pd.read_csv(self.path, encoding="cp1252")
-        df["Value"] = df["Value"].apply(money)
-
-        # Name is required here (unlike the PCA class) since we need it to
-        # look up the target and print out shortlists
-        required_cols = self.cols + ["Name"]
-        for col in required_cols:
-            if col not in df.columns:
-                raise ValueError(f"Column not found: {col}")
-
-        cleany = df.dropna(subset=required_cols).reset_index(drop=True)
-
+        cleany = load_players(self.path, self.cols, "Name")[1]
         self.X = cleany[self.cols].to_numpy(dtype=float)
         self.names = cleany["Name"].to_numpy()
-
-        mean = self.X.mean(axis=0)
-        std = self.X.std(axis=0, ddof=1)
-        self.X_std = (self.X - mean) / std  # Z-score, same formula as the PCA class
+        self.X_std= zscore(self.X)[0]
 
     def find_target(self):
         matches = np.where(self.names == self.target_name)[0]
         if len(matches) == 0:
-            lowered = np.char.lower(self.names.astype(str))
-            matches = np.where(lowered == self.target_name.lower())[0]
-        if len(matches) == 0:
             raise ValueError(f"Could not find '{self.target_name}' in the Name column")
-        if len(matches) > 1:
-            print(f"warning: multiple rows matched '{self.target_name}', using the first one")
         self.target_idx = matches[0]
 
-    # --- similarity metrics, all from scratch, all vectorized (target vs every player at once) ---
 
-    # cosine similarity: measures the ANGLE between 2 vectors, ignores magnitude.
-    # a weaker/stronger version of the same "shape" of player can still score close to 1.
-    @staticmethod
-    def cosine_similarity(X, target):
+
+
+    # angle between 2 vectors, ignores magnitude
+    def cosine_similarity(self, X, target):
         dot = X @ target
         norms = np.linalg.norm(X, axis=1) * np.linalg.norm(target)
         return dot / norms
 
-    # euclidean distance: straight-line distance in feature space.
-    # very sensitive to raw scale - a huge-scale feature (like Value) can dominate it.
-    @staticmethod
-    def euclidean_distance(X, target):
+    # straight line distance between 2 players
+    def euclidean_distance(self, X, target):
         diff = X - target
         return np.sqrt(np.sum(diff**2, axis=1))
 
-    # manhattan distance: sum of absolute per-feature differences.
-    # still scale sensitive, but less dominated by 1 single huge outlier feature than euclidean.
-    @staticmethod
-    def manhattan_distance(X, target):
+    # sum of the absolute differences per feature
+    def manhattan_distance(self, X, target):
         return np.sum(np.abs(X - target), axis=1)
 
-    # pearson correlation: correlates the SHAPE of each players own stat profile
-    # (centered around their own row mean) against the targets shape - ignores overall level.
-    @staticmethod
-    def pearson_correlation(X, target):
+    # correlates the shape of the stats, not the overall level
+    def pearson_correlation(self, X, target):
         X_centered = X - X.mean(axis=1, keepdims=True)
         t_centered = target - target.mean()
         numerator = X_centered @ t_centered
         denominator = np.sqrt(np.sum(X_centered**2, axis=1)) * np.sqrt(np.sum(t_centered**2))
         return numerator / denominator
 
-    # grabs the top N most similar players from a score array, excluding the target himself
-    def top_n(self, scores, higher_is_better=True):
-        order = np.argsort(scores)[::-1] if higher_is_better else np.argsort(scores)
-        order = order[order != self.target_idx]
-        top_idx = order[:self.n_top]
-        return list(zip(self.names[top_idx], scores[top_idx]))
 
-    # runs all 4 metrics against the target on whichever feature matrix its given (raw or standardized)
+
+
+
+    # takes the scores of every player and returns the best n, skipping the target himself
+    def top_n(self, scores, higher_is_better=True):
+        if higher_is_better:
+            order = np.argsort(scores)[::-1]
+        else:
+            order = np.argsort(scores)
+
+        top = []
+        for i in order:
+            if i == self.target_idx:
+                continue
+            top.append((self.names[i], scores[i]))
+            if len(top) == self.n_top:
+                break
+        return top
+
     def run_metrics(self, X):
         target = X[self.target_idx]
         results = {}
@@ -205,107 +200,112 @@ class ScoutingEngine:
         results["pearson"] = self.top_n(self.pearson_correlation(X, target), higher_is_better=True)
         return results
 
-    def print_results(self, label, results):
-        titles = {
-            "cosine": "COSINE SIMILARITY (top 5, higher = more similar)",
-            "euclidean": "EUCLIDEAN DISTANCE (top 5, lower = more similar)",
-            "manhattan": "MANHATTAN DISTANCE (top 5, lower = more similar)",
-            "pearson": "PEARSON CORRELATION (top 5, higher = more similar)",
-        }
-        print(f"\n=== {label} ===")
-        for key, title in titles.items():
-            print(title)
-            for i, (name, val) in enumerate(results[key], start=1):
-                print(f"{i}. {name:<20} : {val:.4f}")
-            print("-----------------------")
+    def print_results(self, results):
+        print("Cosine similarity (higher = more similar)")
+        for name, val in results["cosine"]:
+            print(f"{name} : {val:.4f}")
+        print()
 
-    # builds 1 final shortlist out of the 4 standardized metric shortlists: counts how many
-    # metrics agreed on each player, and remembers WHICH metrics picked them (so an odd
-    # 1-metric-only pick can be traced back to explain why it looks like an outlier later)
-    def build_final_shortlist(self):
-        counter = Counter()
-        picked_by = {}
-        for metric_name, shortlist in self.results_std.items():
-            for name, _ in shortlist:
-                counter[name] += 1
-                picked_by.setdefault(name, []).append(metric_name)
-        self.final_shortlist = counter.most_common(self.n_top)
-        self.picked_by = picked_by
+        print("Euclidean distance (lower = more similar)")
+        for name, val in results["euclidean"]:
+            print(f"{name} : {val:.4f}")
+        print()
+
+        print("Manhattan distance (lower = more similar)")
+        for name, val in results["manhattan"]:
+            print(f"{name} : {val:.4f}")
+        print()
+
+        print("Pearson correlation (higher = more similar)")
+        for name, val in results["pearson"]:
+            print(f"{name} : {val:.4f}")
+        print()
+
+    # counts how many of the 4 metrics agreed on each player
+    def build_final_shortlist(self, results_std):
+        votes = {}
+        for metric_name, shortlist in results_std.items():
+            for name, val in shortlist:
+                if name in votes:
+                    votes[name] += 1
+                else:
+                    votes[name] = 1
+
+        sorted_names = sorted(votes, key=lambda n: votes[n], reverse=True)
+        final = []
+        for name in sorted_names[:self.n_top]:
+            final.append((name, votes[name]))
+        return final
 
     def run(self):
         self.load()
         self.find_target()
         self.results_raw = self.run_metrics(self.X)
         self.results_std = self.run_metrics(self.X_std)
-        self.build_final_shortlist()
+        self.final_shortlist = self.build_final_shortlist(self.results_std)
 
 
-def plot_pca_with_shortlist(pca, target_name, shortlist_names, output_path):
+def plot_pca_with_shortlist(pca, target_name, shortlist_names, output_path, label):
     target_idx = np.where(pca.names == target_name)[0][0]
 
-    fig, ax = plt.subplots(figsize=(10, 8))
+    plt.figure(figsize=(10, 8))
 
-    # everyone else, in grey, in the background
-    ax.scatter(pca.scores[:, 0], pca.scores[:, 1], color="lightgray", s=8, alpha=0.5, label="All players")
+    # everyone else in grey, in the background
+    plt.scatter(pca.scores[:, 0], pca.scores[:, 1], color="lightgray", s=8, label="All players")
 
-    # the final shortlist, highlighted
+    # this method's shortlist, highlighted
     shortlist_idx = [i for i, name in enumerate(pca.names) if name in shortlist_names]
-    ax.scatter(pca.scores[shortlist_idx, 0], pca.scores[shortlist_idx, 1],
-               color="orange", s=70, edgecolors="black", label="Final shortlist")
+    plt.scatter(pca.scores[shortlist_idx, 0], pca.scores[shortlist_idx, 1],
+                color="orange", s=70, edgecolors="black", label=label)
 
-    # the target himself, drawn last so hes always on top and visible
-    ax.scatter(pca.scores[target_idx, 0], pca.scores[target_idx, 1],
-               color="red", s=180, marker="*", edgecolors="black", label=f"{target_name} (target)")
+    # the target himself, drawn last so hes always on top
+    plt.scatter(pca.scores[target_idx, 0], pca.scores[target_idx, 1],
+                color="red", s=180, marker="*", edgecolors="black", label=f"{target_name} (target)")
 
-    ax.set_xlabel("PC1")
-    ax.set_ylabel("PC2")
-    ax.set_title(f"PCA Projection: {target_name} and the Final Shortlist")
-    ax.legend()
-    ax.axhline(0, color="gray", linewidth=0.5)
-    ax.axvline(0, color="gray", linewidth=0.5)
-    plt.tight_layout()
+    plt.xlabel("PC1")
+    plt.ylabel("PC2")
+    plt.title(f"PCA Projection: {target_name} and {label}")
+    plt.legend()
+    plt.axhline(0, color="gray")
+    plt.axvline(0, color="gray")
+
     plt.savefig(output_path, dpi=150)
     plt.close()
-    print(f"PCA shortlist scatter saved to {output_path}")
+    print(f"Saved {output_path}")
 
 
 def main():
     engine = ScoutingEngine(path=CSV_PATH, cols=Principal_Components, target_name=TARGET_NAME, n_top=TOP_N)
     engine.run()
 
-    print(f"\ntarget found: {engine.names[engine.target_idx]} (row {engine.target_idx})")
+    print(f"Target found: {engine.names[engine.target_idx]}")
+    print()
 
-    print("\n\n################ RAW / UNSTANDARDIZED FEATURES ################")
-    engine.print_results("RAW (unstandardized)", engine.results_raw)
+    print("Raw (unstandardized) features:")
+    engine.print_results(engine.results_raw)
 
-    print("\n\n################ STANDARDIZED FEATURES (z-scores) ################")
-    engine.print_results("STANDARDIZED (z-scores)", engine.results_std)
+    print("Standardized features (z-scores):")
+    engine.print_results(engine.results_std)
 
-    print("\n\n################ FINAL RECOMMENDED SHORTLIST ################")
-    print("built from the standardized results only - raw distance metrics get dragged")
-    print("around by Value's huge scale (millions vs 0-100 stats), so raw shortlists")
-    print("mostly just reflect similar transfer value, not similar playing profile.")
-    for i, (name, votes) in enumerate(engine.final_shortlist, start=1):
-        metrics_str = ", ".join(engine.picked_by[name])
-        print(f"{i}. {name:<20} : appeared in {votes}/4 standardized metric shortlists ({metrics_str})")
-    print("-----------------------")
-    print("note: a player picked ONLY by pearson tends to sit far from Salah in PCA space -")
-    print("pearson matches the SHAPE of a players stats, not their overall level, so a much")
-    print("weaker/stronger player with the same relative pattern can still score high on it.")
+    print("Final shortlist (based on the standardized results):")
+    for name, votes in engine.final_shortlist:
+        print(f"{name} : appeared in {votes}/4 metrics")
 
-    # bonus: reuse the PCA class from task 2.2, unchanged, to project the whole pool
-    # and highlight the target + final shortlist on top of it
+    # reuse the PCA class, unchanged, to plot the target and each shortlist
     pca = PCA(path=CSV_PATH, cols=Principal_Components, n_components=N_COMPONENTS)
     pca.run()
 
-    shortlist_names = [name for name, _ in engine.final_shortlist]
-    plot_pca_with_shortlist(pca, TARGET_NAME, shortlist_names, "pca_salah_shortlist.png")
+    # one plot per method, so you can see how each one picks different players
+    for metric_name, shortlist in engine.results_std.items():
+        names = [name for name, val in shortlist]
+        plot_pca_with_shortlist(pca, TARGET_NAME, names,
+                                 f"pca_{metric_name}.png", label=metric_name.capitalize())
 
-    return {
-        "engine": engine,
-        "pca": pca,
-    }
+    # and one more plot for the combined final shortlist
+    shortlist_names = [name for name, votes in engine.final_shortlist]
+    plot_pca_with_shortlist(pca, TARGET_NAME, shortlist_names,
+                             "pca_final_shortlist.png", label="Final shortlist")
 
 
 if __name__ == "__main__":
-    results = main()
+    main()
