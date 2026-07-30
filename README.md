@@ -221,3 +221,9 @@ then it does the same thing we did in the cosine Similarity
 | L. Sané | 3/4 |
 | E. Hazard | 2/4 |
 | Coutinho | 2/4 |
+
+
+## Conclusion 
+
+Based on the data , Euclidean and Manhattan methods are the best for unstandaridized data
+Cosine and Pearson are better for standardized data
