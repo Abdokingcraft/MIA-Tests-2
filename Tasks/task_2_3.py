@@ -152,7 +152,8 @@ class ScoutingEngine:
     def cosine_similarity(self, X, target):
         dot = X @ target
         norms = np.linalg.norm(X, axis=1) * np.linalg.norm(target)
-        return dot / norms
+        cos = dot / norms
+        return np.maximum(cos, 0)
 
     # straight line distance between 2 players
     def euclidean_distance(self, X, target):
