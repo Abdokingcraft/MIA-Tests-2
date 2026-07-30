@@ -185,4 +185,4 @@ notice that at Euclidean and Manhattan have almost exactly the same points
 
 then it does the same thing we did in the cosine Similarity
 
-![pcacosinepng](C:/Users/Lenovo/VSCODE/.tasks2/images/pca_pearson.png)
+![pcacosinepng](images/pca_pearson.png)
