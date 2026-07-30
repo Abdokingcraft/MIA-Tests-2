@@ -192,21 +192,32 @@ then it does the same thing we did in the cosine Similarity
 ## FINAL SCORE
 
 
-RAW (unstandardized) features:
-Cosine     → Coutinho 1.0000 | J. Rodríguez 1.0000 | L. Sané 1.0000 | Bernardo Silva 1.0000 | C. Eriksen 1.0000
-Euclidean  → Coutinho 26.08  | J. Rodríguez 29.90  | J. Oblak 1,500,000.01 | L. Modrić 2,500,000.00 | De Gea 2,500,000.00
-Manhattan  → J. Rodríguez 60 | Coutinho 66 | J. Oblak 1,500,358 | L. Modrić 2,500,127 | De Gea 2,500,307
-Pearson    → E. Hazard 1.0000 | Neymar Jr 1.0000 | K. Mbappé 1.0000 | P. Dybala 1.0000 | L. Messi 1.0000
+### Raw (unstandardized) features
 
-STANDARDIZED (z-score) features:
-Cosine     → K. Mbappé 0.9968 | Marco Asensio 0.9953 | A. Griezmann 0.9946 | E. Hazard 0.9939 | L. Sané 0.9934
-Euclidean  → Coutinho 1.63 | A. Griezmann 1.96 | J. Rodríguez 1.97 | L. Sané 2.02 | C. Ronaldo 2.07
-Manhattan  → J. Rodríguez 3.82 | A. Griezmann 3.90 | K. Mbappé 3.93 | Coutinho 4.00 | L. Sané 4.41
-Pearson    → E. Hazard 0.9982 | K. Mbappé 0.9981 | Neymar Jr 0.9980 | P. Dybala 0.9975 | L. Messi 0.9971
+| Rank | Cosine (↑ better) | Euclidean (↓ better) | Manhattan (↓ better) | Pearson (↑ better) |
+|------|--------------------|-----------------------|-----------------------|----------------------|
+| 1 | Coutinho — 1.0000 | Coutinho — 26.08 | J. Rodríguez — 60 | E. Hazard — 1.0000 |
+| 2 | J. Rodríguez — 1.0000 | J. Rodríguez — 29.90 | Coutinho — 66 | Neymar Jr — 1.0000 |
+| 3 | L. Sané — 1.0000 | J. Oblak — 1,500,000.01 | J. Oblak — 1,500,358 | K. Mbappé — 1.0000 |
+| 4 | Bernardo Silva — 1.0000 | L. Modrić — 2,500,000.00 | L. Modrić — 2,500,127 | P. Dybala — 1.0000 |
+| 5 | C. Eriksen — 1.0000 | De Gea — 2,500,000.00 | De Gea — 2,500,307 | L. Messi — 1.0000 |
 
-Final shortlist (votes across the 4 standardized metrics):
-K. Mbappé — 3/4
-A. Griezmann — 3/4
-L. Sané — 3/4
-E. Hazard — 2/4
-Coutinho — 2/4
+### Standardized (z-score) features
+
+| Rank | Cosine (↑ better) | Euclidean (↓ better) | Manhattan (↓ better) | Pearson (↑ better) |
+|------|--------------------|-----------------------|-----------------------|----------------------|
+| 1 | K. Mbappé — 0.9968 | Coutinho — 1.63 | J. Rodríguez — 3.82 | E. Hazard — 0.9982 |
+| 2 | Marco Asensio — 0.9953 | A. Griezmann — 1.96 | A. Griezmann — 3.90 | K. Mbappé — 0.9981 |
+| 3 | A. Griezmann — 0.9946 | J. Rodríguez — 1.97 | K. Mbappé — 3.93 | Neymar Jr — 0.9980 |
+| 4 | E. Hazard — 0.9939 | L. Sané — 2.02 | Coutinho — 4.00 | P. Dybala — 0.9975 |
+| 5 | L. Sané — 0.9934 | C. Ronaldo — 2.07 | L. Sané — 4.41 | L. Messi — 0.9971 |
+
+### Final shortlist — votes across the 4 standardized metrics
+
+| Player | Metrics matched |
+|--------|------------------|
+| K. Mbappé | 3/4 |
+| A. Griezmann | 3/4 |
+| L. Sané | 3/4 |
+| E. Hazard | 2/4 |
+| Coutinho | 2/4 |
